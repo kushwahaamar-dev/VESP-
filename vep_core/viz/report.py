@@ -180,7 +180,8 @@ class VEPReport:
         CONFIG = {'scrollZoom': True, 'displayModeBar': True, 'responsive': True}
         
         # --- Generate HTML with Custom JS ---
-        html_content = fig.to_html(config=CONFIG, include_plotlyjs='cdn', full_html=True)
+        # Fix 1: Force a specific DIV ID so our JS can find it definitively.
+        html_content = fig.to_html(config=CONFIG, include_plotlyjs='cdn', full_html=True, div_id="vep-graph")
         
         # Inject Custom UI and JS
         custom_ui = """
@@ -189,51 +190,79 @@ class VEPReport:
                 position: absolute;
                 top: 20px;
                 right: 20px;
-                width: 300px;
-                background: rgba(20, 20, 20, 0.95);
-                border: 1px solid #444;
+                width: 320px;
+                background: rgba(15, 15, 15, 0.95);
+                border: 1px solid #555;
                 border-radius: 8px;
-                color: white;
-                font-family: Arial, sans-serif;
+                color: #ddd;
+                font-family: 'Helvetica Neue', Arial, sans-serif;
                 padding: 15px;
-                z-index: 1000;
-                box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+                z-index: 9999; /* Ensure on top */
+                box-shadow: 0 4px 20px rgba(0,0,0,0.8);
                 display: none;
+                backdrop-filter: blur(5px);
             }
-            #info-panel h3 { margin-top: 0; color: #44aaff; border-bottom: 1px solid #444; padding-bottom: 10px; }
-            #close-btn { position: absolute; top: 10px; right: 10px; cursor: pointer; color: #888; }
+            #info-panel h3 { margin-top: 0; color: #44aaff; border-bottom: 1px solid #444; padding-bottom: 10px; font-size: 16px; }
+            #close-btn { position: absolute; top: 10px; right: 10px; cursor: pointer; color: #888; font-size: 18px; }
             #close-btn:hover { color: white; }
+            /* Force text inside panel to wrap */
+            #panel-content { white-space: normal !important; overflow-wrap: break-word; }
+            .plotly-tooltip { display: none !important; } /* Hide default tooltip if we want custom only? Maybe not */
         </style>
         
         <div id="info-panel">
             <div id="close-btn" onclick="document.getElementById('info-panel').style.display='none'">✕</div>
             <div id="panel-content">
-                <h3>Region Info</h3>
-                <p>Click a node to view details.</p>
+                <!-- Content injected here -->
             </div>
         </div>
 
         <script>
-            document.addEventListener("DOMContentLoaded", function() {
-                var plotDiv = document.getElementsByClassName('plotly-graph-div')[0];
+            console.log("VEP-Report: Initializing Custom Scripts...");
+            
+            // Wait for everything to load
+            window.onload = function() {
+                var plotDiv = document.getElementById('vep-graph');
+                
+                if (!plotDiv) {
+                    console.error("VEP-Report: Graph DIV not found!");
+                    return;
+                }
+                
+                console.log("VEP-Report: Graph DIV found. Attaching click listener.");
+                
                 plotDiv.on('plotly_click', function(data){
+                    console.log("VEP-Report: Click Detected!", data);
+                    
+                    if (!data || !data.points || data.points.length === 0) return;
+                    
                     var pt = data.points[0];
-                    if (pt.curveNumber === 1) { 
+                    
+                    // Robust check: Does it have text?
+                    if (pt.text) { 
                         var content = pt.text;
                         var panel = document.getElementById('info-panel');
                         var container = document.getElementById('panel-content');
-                        container.innerHTML = content;
-                        container.innerHTML = container.innerHTML.replace('min-width: 180px', 'width: 100%');
+                        
+                        // Inject content
+                        container.innerHTML = "<h3>Region Details</h3>" + content;
+                        
+                        // Fix style strings that might be narrowly defined in the python string
+                        container.innerHTML = container.innerHTML.replace(/min-width: 180px/g, 'width: 100%');
+                        
                         panel.style.display = 'block';
+                    } else {
+                        console.log("VEP-Report: Clicked point has no text.");
                     }
                 });
-            });
+            };
         </script>
         """
         
+        # Insert UI before the closing body tag
         final_html = html_content.replace('</body>', f'{custom_ui}</body>')
         
         with open(output_path, 'w') as f:
             f.write(final_html)
             
-        print("[Report] Dashboard saved with Interactive Info Panel.")
+        print("[Report] Dashboard saved with Interactive Info Panel (Fixed ID).")
