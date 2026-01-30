@@ -168,5 +168,72 @@ class VEPReport:
         )
         
         fig = go.Figure(data=[trace_glass, dataset_node_trace], layout=layout, frames=frames)
-        fig.write_html(output_path)
-        print("[Report] Glass Brain Dashboard saved.")
+        
+        # Add annotation about interaction
+        fig.add_annotation(
+            text="Controls: Use 'Replay' to restart. Click Nodes for Info.",
+            xref="paper", yref="paper",
+            x=0.05, y=0.02, showarrow=False, xanchor='left',
+            font=dict(color="gray", size=12)
+        )
+        
+        CONFIG = {'scrollZoom': True, 'displayModeBar': True, 'responsive': True}
+        
+        # --- Generate HTML with Custom JS ---
+        html_content = fig.to_html(config=CONFIG, include_plotlyjs='cdn', full_html=True)
+        
+        # Inject Custom UI and JS
+        custom_ui = """
+        <style>
+            #info-panel {
+                position: absolute;
+                top: 20px;
+                right: 20px;
+                width: 300px;
+                background: rgba(20, 20, 20, 0.95);
+                border: 1px solid #444;
+                border-radius: 8px;
+                color: white;
+                font-family: Arial, sans-serif;
+                padding: 15px;
+                z-index: 1000;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+                display: none;
+            }
+            #info-panel h3 { margin-top: 0; color: #44aaff; border-bottom: 1px solid #444; padding-bottom: 10px; }
+            #close-btn { position: absolute; top: 10px; right: 10px; cursor: pointer; color: #888; }
+            #close-btn:hover { color: white; }
+        </style>
+        
+        <div id="info-panel">
+            <div id="close-btn" onclick="document.getElementById('info-panel').style.display='none'">✕</div>
+            <div id="panel-content">
+                <h3>Region Info</h3>
+                <p>Click a node to view details.</p>
+            </div>
+        </div>
+
+        <script>
+            document.addEventListener("DOMContentLoaded", function() {
+                var plotDiv = document.getElementsByClassName('plotly-graph-div')[0];
+                plotDiv.on('plotly_click', function(data){
+                    var pt = data.points[0];
+                    if (pt.curveNumber === 1) { 
+                        var content = pt.text;
+                        var panel = document.getElementById('info-panel');
+                        var container = document.getElementById('panel-content');
+                        container.innerHTML = content;
+                        container.innerHTML = container.innerHTML.replace('min-width: 180px', 'width: 100%');
+                        panel.style.display = 'block';
+                    }
+                });
+            });
+        </script>
+        """
+        
+        final_html = html_content.replace('</body>', f'{custom_ui}</body>')
+        
+        with open(output_path, 'w') as f:
+            f.write(final_html)
+            
+        print("[Report] Dashboard saved with Interactive Info Panel.")
