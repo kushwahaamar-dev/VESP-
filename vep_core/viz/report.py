@@ -41,15 +41,16 @@ class VEPReport:
                 # Fallback if region has no vertices (subcortical?)
                 pass
 
-        # Subsample time (Statistics are fine, animation needs flow)
-        n_frames = 100 # We can handle more frames now because nodes are cheap!
+        # Subsample time
+        # 50-80 frames is the sweet spot for web animation
+        n_frames = 60 
         stride = max(1, len(time) // n_frames)
         frames_data = data[::stride]
         frames_time = time[::stride]
         
         # --- 2. Visual Elements ---
         
-        # A. The Glass Brain (Static Mesh)
+        # A. The Glass Brain (Static Mesh) - Trace 0
         x, y, z = vertices.T
         i, j, k = triangles.T
         
@@ -57,21 +58,18 @@ class VEPReport:
             x=x, y=y, z=z,
             i=i, j=j, k=k,
             color='lightgrey',
-            opacity=0.15, # Very translucent
+            opacity=0.10, # Very translucent
             name='Anatomy',
-            hoverinfo='skip', # Don't block hover on nodes
-            lighting=dict(ambient=0.5, diffuse=0.5)
+            hoverinfo='skip',
+            flatshading=True, # Optimization
+            lighting=dict(ambient=0.6, diffuse=0.1, specular=0.1) # Simpler lighting
         )
         
-        # B. The Active Nodes (Dynamic Scatter)
-        # We animate Color and Size based on signal
-        
+        # B. The Active Nodes (Dynamic Scatter) - Trace 1
         def get_node_trace(frame_idx):
             signal = frames_data[frame_idx]
-            # Size: 5 (baseline) + signal * 5 (expands on spike)
-            # Signal is approx -2 to +2.
-            # Normalize signal for size: (s + 2) * 3 -> 0 to 12
-            sizes = np.clip((signal + 2.0) * 4.0, 5, 20)
+            # Dynamic Sizing
+            sizes = np.clip((signal + 2.0) * 4.0, 4, 25)
             
             return go.Scatter3d(
                 x=dataset_centers[:, 0],
@@ -81,24 +79,27 @@ class VEPReport:
                 marker=dict(
                     size=sizes,
                     color=signal,
-                    colorscale='RdBu_r', # Red = Seizure (Positive/High), Blue = Quiet
+                    colorscale='RdBu_r',
                     cmin=-2.0, cmax=2.0,
                     showscale=True,
-                    colorbar=dict(title='LFP (mV)', x=0.0, y=0.7, len=0.6, tickfont=dict(color='white')),
-                    opacity=0.9
+                    colorbar=dict(title='Local Field Potential (mV)', x=0.0, y=0.7, len=0.6, tickfont=dict(color='white')),
+                    opacity=1.0
                 ),
                 text=[f"Region: {l}<br>x0: {x:.2f}<br>T_onset: {o:.0f}ms" 
                       for l, x, o in zip(labels, x0_values, onset_times)],
                 hoverinfo='text',
-                name='Regions'
+                name='Active Regions'
             )
             
         dataset_node_trace = get_node_trace(0)
         
-        # --- 3. Animation Frames ---
+        # --- 3. Animation Frames (Optimized) ---
+        # Critical Optimization: traces=[1] updates ONLY the nodes (Trace 1).
+        # We do NOT re-send the mesh (Trace 0).
         frames = [
             go.Frame(
-                data=[trace_glass, get_node_trace(k)], # Keep glass, update nodes
+                data=[get_node_trace(k)],
+                traces=[1], # Target the second trace only
                 name=f'f{k}',
                 layout=go.Layout(title_text=f"Time: {t:.0f} ms")
             ) for k, t in enumerate(frames_time)
@@ -108,7 +109,7 @@ class VEPReport:
         steps = [
             dict(
                 method='animate',
-                args=[[f'f{k}'], dict(mode='immediate', frame=dict(duration=50, redraw=True), transition=dict(duration=0))],
+                args=[[f'f{k}'], dict(mode='immediate', frame=dict(duration=100, redraw=True), transition=dict(duration=0))],
                 label=f'{t:.0f}ms'
             ) for k, t in enumerate(frames_time)
         ]
@@ -132,7 +133,7 @@ class VEPReport:
             updatemenus=[dict(
                 type='buttons', showactive=False, y=0.1, x=0.05,
                 buttons=[
-                    dict(label='▶ PLAY', method='animate', args=[None, dict(frame=dict(duration=50, redraw=True), fromcurrent=True)]),
+                    dict(label='▶ PLAY', method='animate', args=[None, dict(frame=dict(duration=100, redraw=True), fromcurrent=True)]),
                     dict(label='Ⅱ PAUSE', method='animate', args=[[None], dict(frame=dict(duration=0, redraw=False), mode='immediate')]),
                 ]
             )]
