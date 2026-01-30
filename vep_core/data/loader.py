@@ -56,10 +56,55 @@ class VEPLoader:
                 pos = centers
                 lengths = np.sqrt(np.sum((pos[:, np.newaxis, :] - pos[np.newaxis, :, :]) ** 2, axis=2))
 
-        # Normalize weights (Crucial for stability)
+        # Normalize weights
         weights = weights / np.max(weights)
+        
+        # Expand Labels to Full Anatomical Names
+        full_labels = [self._expand_label(l) for l in labels]
                 
-        return weights, lengths, labels
+        return weights, lengths, labels, full_labels
+
+    def _expand_label(self, code):
+        """
+        Convert abbreviated region code (e.g. rAMYG) to full name (Right Amygdala).
+        Based on standard TVB/CoCoMac nomenclature.
+        """
+        # 1. Hemisphere
+        if code.startswith('r'):
+            hemi = "Right"
+            body = code[1:]
+        elif code.startswith('l'):
+            hemi = "Left"
+            body = code[1:]
+        else:
+            hemi = ""
+            body = code
+            
+        # 2. Region Lookup (Common TVB/VEP Abbreviations)
+        # Note: This is a robust heuristics map
+        mapping = {
+            'AMYG': 'Amygdala', 'HC': 'Hippocampus', 'PHC': 'Parahippocampal Cortex',
+            'T': 'Temporal Cortex', 'F': 'Frontal Cortex', 'P': 'Parietal Cortex', 'O': 'Occipital Cortex',
+            'V1': 'Primary Visual Cortex', 'V2': 'Secondary Visual Cortex',
+            'CC': 'Cingulate Cortex', 'PFC': 'Prefrontal Cortex',
+            'M1': 'Primary Motor Cortex', 'S1': 'Primary Somatosensory Cortex',
+            'Thal': 'Thalamus', 'Put': 'Putamen', 'Caud': 'Caudate',
+            'GPe': 'Globus Pallidus Ext', 'GPi': 'Globus Pallidus Int',
+            'STC': 'Superior Temporal Cortex', 'ITC': 'Inferior Temporal Cortex',
+            'OFC': 'Orbital Frontal Cortex'
+        }
+        
+        # Try direct match
+        name = mapping.get(body)
+        
+        # If not found, try robust expansion
+        if not name:
+            if 'C' in body and not 'Cortex' in body:
+                body = body.replace('C', ' Cortex')
+            name = body
+            
+        return f"{hemi} {name}".strip()
+
 
     def load_cortex(self):
         """

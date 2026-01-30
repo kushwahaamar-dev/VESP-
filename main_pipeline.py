@@ -32,7 +32,7 @@ def main():
     loader = VEPLoader()
     
     # Load 76-region connectivity (Standard VEP Atlas proxy)
-    weights, lengths, labels = loader.load_connectivity(n_regions=76)
+    weights, lengths, labels, full_labels = loader.load_connectivity(n_regions=76)
     n_regions = len(labels)
     print(f"  > Loaded structural connectivity ({n_regions} regions)")
     print(f"  > Loaded tract lengths (Max delay: {np.max(lengths)/config.CONDUCTION_VELOCITY:.1f} ms)")
@@ -81,6 +81,7 @@ def main():
         x0_values=x0_parameters,
         onset_times=onset_times,
         labels=labels,
+        full_labels=full_labels,
         output_path="VEP_Clinical_Report.html"
     )
     

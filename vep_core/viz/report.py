@@ -11,13 +11,15 @@ import os
 
 class VEPReport:
     @staticmethod
-    def generate_dashboard(cortex, mapping, time, data, x0_values, onset_times, labels, output_path="vep_report.html"):
+    def generate_dashboard(cortex, mapping, time, data, x0_values, onset_times, labels, full_labels=None, output_path="vep_report.html"):
         """
         Create a High-Performance 'Glass Brain' Dashboard.
         - Static Translucent Cortical Mesh (Context)
         - Dynamic 3D Spheres (Active Regions)
         - Performance: 60FPS guaranteed
         """
+        if full_labels is None:
+            full_labels = labels # Fallback
         print(f"[Report] Generating Glass Brain Dashboard at {output_path}...")
         
         # --- 1. Prepare Data ---
@@ -48,6 +50,33 @@ class VEPReport:
         frames_data = data[::stride]
         frames_time = time[::stride]
         
+        # --- Pre-compute Rich Tooltips ---
+        node_text = []
+        for code, fullname, x0, onset in zip(labels, full_labels, x0_values, onset_times):
+            # Determine clinical status
+            if x0 > -1.8: # Epileptogenic
+                status = "<b>SZ ZONE</b>"
+                status_color = "#FF5555" # Red
+            elif x0 > -2.1:
+                status = "Propagated"
+                status_color = "#FFAA00" # Orange
+            else:
+                status = "Healthy"
+                status_color = "#55FF55" # Green
+            
+            onset_str = f"{onset:.0f} ms" if onset > 0 else "--"
+            
+            # HTML Table for Tooltip
+            tip = (
+                f"<b style='font-size:14px'>{fullname}</b><br>"
+                f"<span style='color:#888; font-size:10px'>ID: {code}</span><br>" 
+                f"──────────────────────<br>"
+                f"<b>Status:</b> <span style='color:{status_color}'>{status}</span><br>"
+                f"<b>Excitability (x0):</b> {x0:.3f}<br>"
+                f"<b>Seizure Onset:</b> {onset_str}"
+            )
+            node_text.append(tip)
+        
         # --- 2. Visual Elements ---
         
         # A. The Glass Brain (Static Mesh) - Trace 0
@@ -69,7 +98,7 @@ class VEPReport:
         def get_node_trace(frame_idx):
             signal = frames_data[frame_idx]
             # Dynamic Sizing
-            sizes = np.clip((signal + 2.0) * 4.0, 4, 25)
+            sizes = np.clip((signal + 2.0) * 4.0, 4, 30)
             
             return go.Scatter3d(
                 x=dataset_centers[:, 0],
@@ -85,8 +114,7 @@ class VEPReport:
                     colorbar=dict(title='Local Field Potential (mV)', x=0.0, y=0.7, len=0.6, tickfont=dict(color='white')),
                     opacity=1.0
                 ),
-                text=[f"Region: {l}<br>x0: {x:.2f}<br>T_onset: {o:.0f}ms" 
-                      for l, x, o in zip(labels, x0_values, onset_times)],
+                text=node_text, # Use pre-computed rich text
                 hoverinfo='text',
                 name='Active Regions'
             )
