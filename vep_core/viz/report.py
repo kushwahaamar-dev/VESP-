@@ -79,20 +79,32 @@ class VEPReport:
         
         # --- 2. Visual Elements ---
         
-        # A. The Glass Brain (Static Mesh) - Trace 0
-        x, y, z = vertices.T
-        i, j, k = triangles.T
         
-        trace_glass = go.Mesh3d(
-            x=x, y=y, z=z,
-            i=i, j=j, k=k,
-            color='lightgrey',
-            opacity=0.10, # Very translucent
-            name='Anatomy',
-            hoverinfo='skip',
-            flatshading=True, # Optimization
-            lighting=dict(ambient=0.6, diffuse=0.1, specular=0.1) # Simpler lighting
+        # --- 2. Visual Elements ---
+        
+        # A. The Ghost Anatomy (Point Cloud) - Trace 0
+        # Replaced Mesh3d with Scatter3d to guarantee click-through capabilities.
+        # Mesh surfaces often occlude inner points from raycasting.
+        # We subsample the vertices to create a lightweight "Ghost" envelope.
+        
+        # Subsample vertices (e.g., take every 3rd vertex, or random 5000)
+        rng = np.random.RandomState(42)
+        idx_glass = rng.choice(len(vertices), 4000, replace=False)
+        vx, vy, vz = vertices[idx_glass].T
+        
+        trace_glass = go.Scatter3d(
+            x=vx, y=vy, z=vz,
+            mode='markers',
+            marker=dict(
+                size=3,
+                color='grey',
+                opacity=0.15, # Ghostly
+                symbol='circle'
+            ),
+            name='Anatomy (Ghost)',
+            hoverinfo='none' # Strictly ignore hover on this layer
         )
+
         
         # B. The Active Nodes (Dynamic Scatter) - Trace 1
         def get_node_trace(frame_idx):
