@@ -11,6 +11,7 @@ Usage:
 
 import argparse
 import sys
+import os
 import numpy as np
 
 # Import Core Packages
@@ -47,6 +48,19 @@ def parse_args():
         type=str, 
         default="PAT001", 
         help="Patient identifier (for logging/metadata)"
+    )
+    
+    parser.add_argument(
+        "--checkpoint", 
+        type=str, 
+        default="simulation_checkpoint.npz", 
+        help="Path for saving/loading simulation state"
+    )
+    
+    parser.add_argument(
+        "--resume", 
+        action="store_true", 
+        help="Resume from checkpoint if exists"
     )
     
     return parser.parse_args()
@@ -101,7 +115,13 @@ def main():
     simulator = ForwardSimulator(weights, lengths, n_regions)
     
     # Run with CLI duration
-    time, history, onset_times = simulator.run(x0_parameters, duration=args.duration)
+    # Checkpointing Logic
+    if args.resume and os.path.exists(args.checkpoint):
+        print(f"  > Resuming from checkpoint: {args.checkpoint}")
+        time, history, onset_times = simulator.load_checkpoint(args.checkpoint)
+    else:
+        time, history, onset_times = simulator.run(x0_parameters, duration=args.duration)
+        simulator.save_checkpoint(args.checkpoint, time, history, onset_times)
 
     print(f"  > Simulation Stats: Range [{np.min(history):.2f}, {np.max(history):.2f}] mV")
     if np.max(history) < -0.5:

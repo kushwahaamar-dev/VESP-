@@ -129,3 +129,16 @@ class ForwardSimulator:
                     saved_data[idx] = current_state[:, 0].astype(np.float32)
                     
         return saved_time, saved_data, onset_times
+
+    def save_checkpoint(self, path, time, history, onset_times):
+        """Save simulation results to compressed NPZ."""
+        np.savez_compressed(path, time=time, history=history, onset_times=onset_times)
+        print(f"[Simulator] Checkpoint saved: {path}")
+
+    def load_checkpoint(self, path):
+        """Load simulation results."""
+        if not path.endswith('.npz'):
+            path += '.npz'
+        data = np.load(path)
+        print(f"[Simulator] Checkpoint loaded: {path}")
+        return data['time'], data['history'], data['onset_times']
