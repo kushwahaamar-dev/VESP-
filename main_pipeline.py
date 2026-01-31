@@ -20,10 +20,42 @@ from vep_core.inference.inversion import VEPInference
 from vep_core.simulation.forward import ForwardSimulator
 from vep_core.viz.report import VEPReport
 
+def parse_args():
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(
+        description="Virtual Epileptic Patient (VEP) Pipeline",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    
+    parser.add_argument(
+        "--duration", 
+        type=float, 
+        default=config.default_sim.duration,
+        help="Simulation duration in milliseconds"
+    )
+    
+    parser.add_argument(
+        "--output", 
+        type=str, 
+        default="VEP_Clinical_Report.html", 
+        help="Path to save the generated HTML report"
+    )
+    
+    parser.add_argument(
+        "--patient", 
+        type=str, 
+        default="PAT001", 
+        help="Patient identifier (for logging/metadata)"
+    )
+    
+    return parser.parse_args()
+
 def main():
+    args = parse_args()
+
     print("==============================================================")
-    print("      Virtual Epileptic Patient (VEP) Pipeline v2.0           ")
-    print("      High-Performance R&D Implementation                     ")
+    print(f"      Virtual Epileptic Patient (VEP) Pipeline v2.1           ")
+    print(f"      Patient: {args.patient} | Duration: {args.duration}ms   ")
     print("==============================================================")
     
     # 1. Initialize & Load Data
@@ -35,7 +67,12 @@ def main():
     weights, lengths, labels, full_labels = loader.load_connectivity(n_regions=76)
     n_regions = len(labels)
     print(f"  > Loaded structural connectivity ({n_regions} regions)")
-    print(f"  > Loaded tract lengths (Max delay: {np.max(lengths)/config.CONDUCTION_VELOCITY:.1f} ms)")
+    
+    # Use config for velocity display, but we should probably use the object if we had it. 
+    # For now, config legacy constant works or use args.
+    # Note: velocities are fixed in PhysicsConfig unless we add CLI arg for them.
+    max_delay = np.max(lengths)/config.CONDUCTION_VELOCITY
+    print(f"  > Loaded tract lengths (Max delay: {max_delay:.1f} ms)")
     
     # Load Cortical Surface
     cortex_verts, cortex_tris, region_mapping = loader.load_cortex()
@@ -60,9 +97,10 @@ def main():
     # 3. Forward Simulation (Epileptor Model)
     # ----------------------------------------------------------------
     print("\n[Step 3] Running Forward Simulation (Physics-Based with Delays)...")
-    # 10s simulation typically
     simulator = ForwardSimulator(weights, lengths, n_regions)
-    time, history, onset_times = simulator.run(x0_parameters, duration=config.SIMULATION_DURATION)
+    
+    # Run with CLI duration
+    time, history, onset_times = simulator.run(x0_parameters, duration=args.duration)
 
     print(f"  > Simulation Stats: Range [{np.min(history):.2f}, {np.max(history):.2f}] mV")
     if np.max(history) < -0.5:
@@ -82,11 +120,11 @@ def main():
         onset_times=onset_times,
         labels=labels,
         full_labels=full_labels,
-        output_path="VEP_Clinical_Report.html"
+        output_path=args.output
     )
     
     print("\n==============================================================")
-    print("Pipeline Complete. Report available at: VEP_Clinical_Report.html")
+    print(f"Pipeline Complete. Report available at: {args.output}")
     print("==============================================================")
 
 if __name__ == "__main__":
