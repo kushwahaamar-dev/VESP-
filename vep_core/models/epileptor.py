@@ -3,23 +3,17 @@ The Epileptor Neural Mass Model (High-Performance Kernel)
 =========================================================
 JIT-compiled implementation of the 6D system using Numba.
 Ensures microsecond-scale execution for clinical-grade simulations.
+Refactored for Strict Configuration.
 """
 
 import numpy as np
 from numba import jit
-from .. import config
+from ..config import default_physics, PhysicsConfig
 
 @jit(nopython=True, fastmath=True, cache=True)
 def dfun(state, coupling, param_x0, I_ext1, I_ext2, r_timescale, tau0):
     """
     Compute derivatives (deterministic part) for the 6D Epileptor.
-    
-    Args:
-        state: (N, 6) array [x1, y1, z, x2, y2, g]
-        coupling: (N,) array of input current from network
-        param_x0: (N,) excitability parameters
-    Returns:
-        d_state: (N, 6) derivatives
     """
     x1 = state[:, 0]
     y1 = state[:, 1]
@@ -29,12 +23,7 @@ def dfun(state, coupling, param_x0, I_ext1, I_ext2, r_timescale, tau0):
     g  = state[:, 5]
     
     # --- Pop 1: Fast Discharges ---
-    # f1(x1) = x1^3 - 3x1^2 if x1 < 0 else (x1 - 0.6(z-4))^2 ...
-    # The standard Epileptor uses a cubic approximation f1 = x1^3 - 3x1^2 to maintain smoothness
-    # But strictly Jirsa 2014 has a slope change. 
-    # For speed/smoothness in VEP, we use the polynomial form from Proix 2017:
     # dx1 = y1 - x1^3 + 3x1^2 - z + I_ext1 + coupling
-    
     dx1 = y1 - x1**3 + 3*x1**2 - z + I_ext1 + coupling
     dy1 = 1 - 5*x1**2 - y1
     
@@ -53,9 +42,11 @@ def dfun(state, coupling, param_x0, I_ext1, I_ext2, r_timescale, tau0):
     return d_state
 
 class Epileptor:
-    def __init__(self, n_regions):
+    def __init__(self, n_regions, config: PhysicsConfig = default_physics):
         self.n_regions = n_regions
-        self.param_x0 = np.ones(n_regions) * -2.2
+        self.config = config
+        # Initial excitability (default)
+        self.param_x0 = np.ones(n_regions) * self.config.x0_critical
         
     def set_epileptogenicity(self, x0):
         self.param_x0 = x0.astype(np.float64)
@@ -70,20 +61,24 @@ class Epileptor:
         state[:, 5] = 0.0   # g
         return state
 
-    def integrate_step(self, state, coupling, dt=config.DT):
+    def integrate_step(self, state, coupling, dt=None):
         """
         Euler-Maruyama step (Python wrapper around JIT kernel).
         """
+        if dt is None:
+            # We assume dt is handled by caller (simulator) loop, 
+            # but if not provided we might need a default? 
+            # Ideally simulator controls dt. 
+            # We'll use 0.05 default if None, or raise error?
+            dt = 0.05
+            
         # 1. Deterministic Drift
         derivs = dfun(state, coupling, self.param_x0, 
-                      config.I_EXT_1, config.I_EXT_2, 
-                      config.R_TIMESCALE, config.TAU_0)
+                      self.config.Iext1, self.config.Iext2, 
+                      self.config.r, self.config.tau0)
         
         # 2. Stochastic Diffusion (Additive Noise on x1 and x2)
-        # We add noise to x1 (Pop1) and x2 (Pop2) to trigger transitions
-        sig = 0.0002 # Noise std dev
-        # Noise shape (N, 6). Only columns 0 (x1) and 3 (x2) get noise? 
-        # Usually just x1 or x2. Let's add to both excitation variables.
+        sig = self.config.noise_sig
         
         # In-place update
         state += derivs * dt

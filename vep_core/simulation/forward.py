@@ -2,12 +2,13 @@
 Forward Simulation Engine
 =========================
 High-Performance Time-Integration with Transmission Delays.
+Refatored to use Strict Configuration.
 """
 
 import numpy as np
 from tqdm import tqdm
 from numba import jit
-from .. import config
+from ..config import default_physics, default_sim, PhysicsConfig, SimConfig
 from ..models.epileptor import Epileptor
 
 @jit(nopython=True, fastmath=True, cache=True)
@@ -31,16 +32,7 @@ def compute_delay_coupling(history, weights, delays, current_step, buffer_size, 
                 # Calculate delayed index
                 delay_steps = delays[i, j]
                 # Circular buffer index
-                # If t < delay, we use index 0 (IC) or handle gracefully
-                # Since history is initialized with ICs, this is fine
-                
-                # Formula: (current_t - delay) % size
-                # Note: delay_steps can be 0 for self-connection (usually 0 weight anyway)
                 hist_ptr = (current_step - delay_steps)
-                
-                # Careful with negative time in ring buffer logic
-                # Since we use modulo, (curr - delay) % L works in Python/Numba 
-                # e.g. (5 - 10) % 100 = -5 % 100 = 95. Correct for a ring buffer.
                 hist_ptr = hist_ptr % buffer_size
                 
                 delayed_x1 = history[hist_ptr, j]
@@ -52,18 +44,21 @@ def compute_delay_coupling(history, weights, delays, current_step, buffer_size, 
     return coupling_vector
 
 class ForwardSimulator:
-    def __init__(self, weights, lengths, n_regions):
+    def __init__(self, weights, lengths, n_regions, 
+                 phys_config: PhysicsConfig = default_physics, 
+                 sim_config: SimConfig = default_sim):
+        
         self.weights = weights
         self.lengths = lengths
         self.n_regions = n_regions
+        self.phys_config = phys_config
+        self.sim_config = sim_config
         self.model = Epileptor(n_regions)
         
         # Compute Delays (Integer steps)
-        # v = 3.0 mm/ms. dt = 0.05 ms.
-        # time_delay = L / v
-        # steps = time_delay / dt = L / (v * dt)
-        velocity = config.CONDUCTION_VELOCITY
-        dt = config.DT
+        velocity = self.phys_config.conduction_velocity
+        dt = self.sim_config.dt
+        
         self.delays = (lengths / (velocity * dt)).astype(np.int32)
         
         self.max_delay_steps = np.max(self.delays)
@@ -71,41 +66,38 @@ class ForwardSimulator:
         
         print(f"[Simulator] Max Delay: {np.max(lengths)/velocity:.1f}ms ({self.max_delay_steps} steps)")
         
-    def run(self, x0_parameters, duration=config.SIMULATION_LENGTH):
+    def run(self, x0_parameters, duration=None):
         """
         Execute the simulation with delays.
         """
-        steps = int(duration / config.DT)
+        if duration is None:
+            duration = self.sim_config.duration
+            
+        dt = self.sim_config.dt
+        steps = int(duration / dt)
+        
         print(f"[Simulation] Running HPCI kernel (Delays enabled, JIT compiled)...")
         
         # 1. Setup Model
         self.model.set_epileptogenicity(x0_parameters)
         
         # 2. Initialize History Ring Buffer
-        # We only need to store 'x1' for coupling. 
-        # But the model integration needs full state.
-        # Optimization: Store full state only for current, X1 history for delays.
-        
         # History of x1 variable (Ring Buffer) -> Shape (Buffer, N)
         history_x1 = np.zeros((self.buffer_size, self.n_regions), dtype=np.float64)
         
         # Initial State (Current)
         current_state = self.model.initial_state()
         
-        # Fill buffer with initial condition (stationary assumption t<0)
+        # Fill buffer with initial condition
         history_x1[:] = current_state[:, 0]
         
         # 3. Output Storage (Downsampled)
-        downsample = int(2.0 / config.DT)  # Save every 2ms
+        downsample = int(2.0 / dt)  # Save every 2ms
         n_saved = steps // downsample
-        saved_data = np.zeros((n_saved, self.n_regions), dtype=np.float32) # Save memory
+        saved_data = np.zeros((n_saved, self.n_regions), dtype=np.float32)
         saved_time = np.linspace(0, duration, n_saved)
         
         # Onset Time Tracking
-        # Track when Region's x1 amplitude implies seizure.
-        # Simple detector: z dropping below 2.5? 
-        # Or x1 > -1.0 for extended time?
-        # Let's use x1 > -1.2 as "Spiking"
         onset_times = np.full(self.n_regions, -1.0)
         
         # 4. Integration Loop
@@ -114,7 +106,7 @@ class ForwardSimulator:
             # Compute Delayed Coupling (JIT)
             coupling = compute_delay_coupling(
                 history_x1, self.weights, self.delays, t, 
-                self.buffer_size, config.GLOBAL_COUPLING
+                self.buffer_size, self.phys_config.global_coupling
             )
             
             # Step Model
@@ -125,10 +117,9 @@ class ForwardSimulator:
             history_x1[ptr, :] = current_state[:, 0]
             
             # Onset Detection
-            # If x1 > -1.2 (Spike threshold) and onset not yet recorded
             spiking_indices = np.where((current_state[:, 0] > -1.2) & (onset_times == -1.0))[0]
             if len(spiking_indices) > 0:
-                current_time_ms = t * config.DT
+                current_time_ms = t * dt
                 onset_times[spiking_indices] = current_time_ms
             
             # Save Data

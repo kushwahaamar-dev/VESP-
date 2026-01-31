@@ -62,7 +62,7 @@ def main():
     print("\n[Step 3] Running Forward Simulation (Physics-Based with Delays)...")
     # 10s simulation typically
     simulator = ForwardSimulator(weights, lengths, n_regions)
-    time, history, onset_times = simulator.run(x0_parameters, duration=config.SIMULATION_LENGTH)
+    time, history, onset_times = simulator.run(x0_parameters, duration=config.SIMULATION_DURATION)
 
     print(f"  > Simulation Stats: Range [{np.min(history):.2f}, {np.max(history):.2f}] mV")
     if np.max(history) < -0.5:
