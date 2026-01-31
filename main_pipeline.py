@@ -19,6 +19,7 @@ from vep_core.data.loader import VEPLoader
 from vep_core.inference.inversion import VEPInference
 from vep_core.simulation.forward import ForwardSimulator
 from vep_core.viz.report import VEPReport
+from vep_core.analytics import ClinicalAnalytics
 
 def parse_args():
     """Parse command-line arguments."""
@@ -107,6 +108,13 @@ def main():
         print("  WARNING: No high-amplitude seizure activity detected!")
     else:
         print("  > Seizure activity confirmed (High amplitude detected).")
+
+    # 3b. Clinical Analytics
+    metrics = ClinicalAnalytics.analyze_propagation(onset_times, labels)
+    print(f"\n  [Analytics] Seizure Metrics:")
+    print(f"    - Primary EZ: {metrics.primary_ez_region}")
+    print(f"    - Recruitment: {metrics.n_recruited}/{n_regions} ({metrics.recruitment_ratio:.1%})")
+    print(f"    - Propagation Latency (Mean): {metrics.mean_latency:.1f} ms")
 
     # 4. Clinical Reporting & Visualization
     # ----------------------------------------------------------------
