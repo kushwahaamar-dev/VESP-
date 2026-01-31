@@ -8,8 +8,11 @@ Refatored to use Strict Configuration.
 import numpy as np
 from tqdm import tqdm
 from numba import jit
+import logging
 from ..config import default_physics, default_sim, PhysicsConfig, SimConfig
 from ..models.epileptor import Epileptor
+
+logger = logging.getLogger(__name__)
 
 @jit(nopython=True, fastmath=True, cache=True)
 def compute_delay_coupling(history, weights, delays, current_step, buffer_size, global_coupling):
@@ -64,7 +67,7 @@ class ForwardSimulator:
         self.max_delay_steps = np.max(self.delays)
         self.buffer_size = self.max_delay_steps + 10 # Safety margin
         
-        print(f"[Simulator] Max Delay: {np.max(lengths)/velocity:.1f}ms ({self.max_delay_steps} steps)")
+        logger.info(f"Max Delay: {np.max(lengths)/velocity:.1f}ms ({self.max_delay_steps} steps)")
         
     def run(self, x0_parameters, duration=None):
         """
@@ -76,7 +79,7 @@ class ForwardSimulator:
         dt = self.sim_config.dt
         steps = int(duration / dt)
         
-        print(f"[Simulation] Running HPCI kernel (Delays enabled, JIT compiled)...")
+        logger.info(f"Running HPCI kernel (Delays enabled, JIT compiled)...")
         
         # 1. Setup Model
         self.model.set_epileptogenicity(x0_parameters)
@@ -133,12 +136,12 @@ class ForwardSimulator:
     def save_checkpoint(self, path, time, history, onset_times):
         """Save simulation results to compressed NPZ."""
         np.savez_compressed(path, time=time, history=history, onset_times=onset_times)
-        print(f"[Simulator] Checkpoint saved: {path}")
+        logger.info(f"Checkpoint saved: {path}")
 
     def load_checkpoint(self, path):
         """Load simulation results."""
         if not path.endswith('.npz'):
             path += '.npz'
         data = np.load(path)
-        print(f"[Simulator] Checkpoint loaded: {path}")
+        logger.info(f"Checkpoint loaded: {path}")
         return data['time'], data['history'], data['onset_times']

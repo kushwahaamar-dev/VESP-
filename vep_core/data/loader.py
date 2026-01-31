@@ -9,6 +9,9 @@ import os
 import numpy as np
 import zipfile
 import re
+import logging
+
+logger = logging.getLogger(__name__)
 
 class VEPLoader:
     def __init__(self, data_root=None):
@@ -17,7 +20,9 @@ class VEPLoader:
         If None, attempts to auto-discover in site-packages.
         """
         self.data_root = data_root or self._find_data_root()
-        print(f"[VEPLoader] Using data root: {self.data_root}")
+        """
+        self.data_root = data_root or self._find_data_root()
+        logger.info(f"Using data root: {self.data_root}")
         
     def _find_data_root(self):
         # Common locations for tvb-data
@@ -51,7 +56,7 @@ class VEPLoader:
                 with zf.open('tract_lengths.txt') as f:
                     lengths = np.loadtxt(f)
             except KeyError:
-                print("[VEPLoader] tract_lengths.txt not found. Computing Euclidean distances.")
+                logger.warning("tract_lengths.txt not found. Computing Euclidean distances.")
                 # Compute from centers
                 pos = centers
                 lengths = np.sqrt(np.sum((pos[:, np.newaxis, :] - pos[np.newaxis, :, :]) ** 2, axis=2))
