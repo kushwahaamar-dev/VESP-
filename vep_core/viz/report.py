@@ -1,93 +1,44 @@
 """
-Clinical Visualization Module
-=============================
-Generates the VEP Report dashboard.
-Renders the cortical mesh and maps the seizure propagation onto it.
+VEP Visualization Module
+========================
+Generates interactive "Glass Brain" dashboards with clinical telemetry.
 """
 
 import numpy as np
 import plotly.graph_objects as go
-import os
+from plotly.subplots import make_subplots
 
 class VEPReport:
+    """Clinical reporting engine."""
+    
     @staticmethod
-    def generate_dashboard(cortex, mapping, time, data, x0_values, onset_times, labels, full_labels=None, output_path="vep_report.html"):
+    def generate_dashboard(cortex, mapping, time, data, x0_values, onset_times, 
+                          labels, full_labels=None, output_path="vep_report.html"):
         """
-        Create a High-Performance 'Glass Brain' Dashboard.
-        - Static Translucent Cortical Mesh (Context)
-        - Dynamic 3D Spheres (Active Regions)
-        - Performance: 60FPS guaranteed
+        Create the full HTML dashboard.
         """
         if full_labels is None:
-            full_labels = labels # Fallback
+            full_labels = labels
+            
         print(f"[Report] Generating Glass Brain Dashboard at {output_path}...")
         
-        # --- 1. Prepare Data ---
-        # We need Region Centers for the nodes.
-        # We can approximate centers from the mesh mapping if not provided, 
-        # but better to use the centers from the loader. 
-        # Ideally, main_pipeline should pass 'centers'. 
-        # I will calculate centroids from the mapping + cortex for now to be self-contained.
-        
         vertices, triangles, _ = cortex
-        n_regions = len(labels)
-        dataset_centers = np.zeros((n_regions, 3))
+        n_regions = data.shape[1]
         
-        for r_idx in range(n_regions):
-            # Find vertices belonging to region r_idx
-            # mapping is array of size (n_verts,) with region indices
-            vert_indices = np.where(mapping == r_idx)[0]
-            if len(vert_indices) > 0:
-                dataset_centers[r_idx] = np.mean(vertices[vert_indices], axis=0)
-            else:
-                # Fallback if region has no vertices (subcortical?)
-                pass
-
-        # Subsample time
-        # 50-80 frames is the sweet spot for web animation
-        n_frames = 60 
-        stride = max(1, len(time) // n_frames)
-        frames_data = data[::stride]
-        frames_time = time[::stride]
+        # --- 1. Setup Figure with Subplots ---
+        # Row 1: 3D Brain (70% height)
+        # Row 2: 2D Time Series (30% height)
+        fig = make_subplots(
+            rows=2, cols=1,
+            row_heights=[0.7, 0.3],
+            specs=[[{'type': 'scene'}], [{'type': 'xy'}]],
+            vertical_spacing=0.05,
+            subplot_titles=("3D Seizure Propagation (Glass Brain)", "Regional Activity (mV)")
+        )
         
-        # --- Pre-compute Rich Tooltips ---
-        node_text = []
-        for code, fullname, x0, onset in zip(labels, full_labels, x0_values, onset_times):
-            # Determine clinical status
-            if x0 > -1.8: # Epileptogenic
-                status = "<b>SZ ZONE</b>"
-                status_color = "#FF5555" # Red
-            elif x0 > -2.1:
-                status = "Propagated"
-                status_color = "#FFAA00" # Orange
-            else:
-                status = "Healthy"
-                status_color = "#55FF55" # Green
-            
-            onset_str = f"{onset:.0f} ms" if onset > 0 else "--"
-            
-            # HTML Table for Tooltip
-            tip = (
-                f"<b style='font-size:14px'>{fullname}</b><br>"
-                f"<span style='color:#888; font-size:10px'>ID: {code}</span><br>" 
-                f"──────────────────────<br>"
-                f"<b>Status:</b> <span style='color:{status_color}'>{status}</span><br>"
-                f"<b>Excitability (x0):</b> {x0:.3f}<br>"
-                f"<b>Seizure Onset:</b> {onset_str}"
-            )
-            node_text.append(tip)
-        
-        # --- 2. Visual Elements ---
-        
-        
-        # --- 2. Visual Elements ---
+        # --- 2. Visual Elements (3D) ---
         
         # A. The Ghost Anatomy (Point Cloud) - Trace 0
-        # Replaced Mesh3d with Scatter3d to guarantee click-through capabilities.
-        # Mesh surfaces often occlude inner points from raycasting.
-        # We subsample the vertices to create a lightweight "Ghost" envelope.
-        
-        # Subsample vertices (e.g., take every 3rd vertex, or random 5000)
         rng = np.random.RandomState(42)
         idx_glass = rng.choice(len(vertices), 4000, replace=False)
         vx, vy, vz = vertices[idx_glass].T
@@ -95,93 +46,194 @@ class VEPReport:
         trace_glass = go.Scatter3d(
             x=vx, y=vy, z=vz,
             mode='markers',
-            marker=dict(
-                size=3,
-                color='grey',
-                opacity=0.15, # Ghostly
-                symbol='circle'
-            ),
+            marker=dict(size=2, color='grey', opacity=0.1, symbol='circle'),
             name='Anatomy (Ghost)',
-            hoverinfo='none' # Strictly ignore hover on this layer
+            hoverinfo='none'
         )
+        fig.add_trace(trace_glass, row=1, col=1)
 
-        
         # B. The Active Nodes (Dynamic Scatter) - Trace 1
+        # Pre-compute layout for nodes
+        # Calculate centroids
+        region_centers = np.zeros((n_regions, 3))
+        for r in range(n_regions):
+            # mapping is array where value is region idx
+            # We want vertices belonging to region r
+            # TVB mapping: vertex_idx -> region_idx
+            # region_mapping is (N_verts,)
+            # Wait, loader.load_cortex returns region_mapping
+            
+            # Simple centroid calculation
+            mask = (mapping == r)
+            if np.sum(mask) > 0:
+                region_centers[r] = np.mean(vertices[mask], axis=0)
+            else:
+                region_centers[r] = [0, 0, 0] # Fallback
+                
+        rx, ry, rz = region_centers.T
+        
+        # Pre-compute Tooltips (Rich HTML)
+        node_texts = []
+        for i in range(n_regions):
+            name = full_labels[i]
+            code = labels[i]
+            x0 = x0_values[i]
+            onset = onset_times[i]
+            
+            # Status
+            if x0 > -2.0:
+                status = "<span style='color:#ff4444; font-weight:bold'>SZ ZONE (EZ)</span>"
+            elif onset > 0:
+                status = "<span style='color:#ffaa00'>Propagated (PZ)</span>"
+            else:
+                status = "<span style='color:#88cc88'>Healthy</span>"
+                
+            text = (
+                f"<b style='font-size:16px'>{name}</b><br>"
+                f"<span style='color:#888; font-size:12px'>ID: {code}</span>"
+                f"<hr style='margin:5px 0; border:0; border-top:1px solid #444'>"
+                f"<div style='min-width: 180px'>"
+                f"  <div style='display:flex; justify-content:space-between'><span>Status:</span> {status}</div>"
+                f"  <div style='display:flex; justify-content:space-between'><span>Excitability (x0):</span> <b>{x0:.3f}</b></div>"
+                f"  <div style='display:flex; justify-content:space-between'><span>Seizure Onset:</span> <b>{onset:.0f} ms</b></div>"
+                f"</div>"
+            )
+            node_texts.append(text)
+            
         def get_node_trace(frame_idx):
-            signal = frames_data[frame_idx]
-            # Dynamic Sizing
-            sizes = np.clip((signal + 2.0) * 4.0, 4, 30)
+            current_vals = data[frame_idx] # (N,)
+            
+            # Dynamic Sizing & Coloring
+            # Sigmoid normalization for size
+            # x1 ranges [-2, 2] usually.
+            norm_act = (current_vals + 2.0) / 4.0 # 0 to 1
+            norm_act = np.clip(norm_act, 0.1, 1.0)
+            sizes = 5 + 20 * (norm_act**2)
             
             return go.Scatter3d(
-                x=dataset_centers[:, 0],
-                y=dataset_centers[:, 1],
-                z=dataset_centers[:, 2],
+                x=rx, y=ry, z=rz,
                 mode='markers',
                 marker=dict(
                     size=sizes,
-                    color=signal,
-                    colorscale='RdBu_r',
-                    cmin=-2.0, cmax=2.0,
-                    showscale=True,
-                    colorbar=dict(title='Local Field Potential (mV)', x=0.0, y=0.7, len=0.6, tickfont=dict(color='white')),
-                    opacity=1.0
+                    color=current_vals,
+                    colorscale='Magma',
+                    cmin=-2.0, cmax=1.0,
+                    opacity=0.9
                 ),
-                text=node_text, # Use pre-computed rich text
+                text=node_texts,
                 hoverinfo='text',
                 name='Active Regions'
             )
             
+        # Initial State
         dataset_node_trace = get_node_trace(0)
+        fig.add_trace(dataset_node_trace, row=1, col=1)
         
-        # --- 3. Animation Frames (Optimized) ---
-        # Critical Optimization: traces=[1] updates ONLY the nodes (Trace 1).
-        # We do NOT re-send the mesh (Trace 0).
-        frames = [
-            go.Frame(
-                data=[get_node_trace(k)],
-                traces=[1], # Target the second trace only
-                name=f'f{k}',
-                layout=go.Layout(title_text=f"Time: {t:.0f} ms")
-            ) for k, t in enumerate(frames_time)
-        ]
+        # --- 3. Visual Elements (2D Time Series) ---
+        # Plot Top 5 Relevant Regions
+        # Priority: EZ regions, then Early Onset regions
+        priority_indices = []
         
-        # --- 4. Layout & Controls ---
-        steps = [
-            dict(
-                method='animate',
-                args=[[f'f{k}'], dict(mode='immediate', frame=dict(duration=100, redraw=True), transition=dict(duration=0))],
-                label=f'{t:.0f}ms'
-            ) for k, t in enumerate(frames_time)
-        ]
+        # 1. Add EZ
+        ez_idx = np.where(x0_values > -2.0)[0]
+        priority_indices.extend(ez_idx)
         
-        layout = go.Layout(
-            title=dict(text="High-Performance VEP Dashboard (Glass Brain)", font=dict(size=24, color='white')),
-            template="plotly_dark",
-            paper_bgcolor="#050505",
-            height=900,
+        # 2. Add Early Onset (Propagated)
+        prop_idx = np.where((onset_times > 0) & (x0_values <= -2.0))[0]
+        # Sort by onset time
+        sorted_prop = prop_idx[np.argsort(onset_times[prop_idx])]
+        priority_indices.extend(sorted_prop[:5]) # Top 5 propagated
+        
+        # Unique and limit
+        unique_indices = []
+        seen = set()
+        for idx in priority_indices:
+            if idx not in seen:
+                unique_indices.append(idx)
+                seen.add(idx)
+                
+        # Limit to 8 traces to avoid clutter
+        unique_indices = unique_indices[:8]
+        
+        # Add traces
+        colors = ['red', 'orange', 'yellow', 'cyan', 'magenta', 'lime', 'white', 'blue']
+        for i, idx in enumerate(unique_indices):
+            color = colors[i % len(colors)]
+            lbl = labels[idx]
+            fig.add_trace(
+                go.Scatter(
+                    x=time, y=data[:, idx],
+                    mode='lines',
+                    name=lbl,
+                    line=dict(width=1.5, color=color),
+                    opacity=0.8
+                ),
+                row=2, col=1
+            )
+            
+        # --- 4. Animation Frames (Downsampled) ---
+        downsample_anim = 5
+        frames = []
+        # Only animate the 3D trace (Trace 1 in Figure -> actually index might be different with subplots)
+        # In subplots, traces are flattened list.
+        # Trace 0: Ghost (3D)
+        # Trace 1: Nodes (3D)
+        # Traces 2+: Lines (2D)
+        # We only want to animate Trace 1.
+        
+        skip = 20 # 100ms per frame if dt=0.05 -> 20 steps = 1ms. 
+        # Simulation duration 4000ms. 4000/skip frames.
+        # Let's say we want 100 frames total? 
+        step_stride = max(1, len(time) // 200) 
+        
+        for k in range(0, len(time), step_stride):
+            frame_node_trace = get_node_trace(k)
+            frames.append(go.Frame(
+                data=[frame_node_trace], # Only updating trace 1?
+                # Plotly update limitation: need to target specific trace indices.
+                # If we pass list of length 1, it might update trace 0?
+                # We need explicit traces=[1]
+                traces=[1], 
+                name=str(time[k])
+            ))
+            
+        fig.frames = frames
+        
+        # --- 5. Layout & Controls ---
+        # Update Scene (3D)
+        fig.update_layout(
             scene=dict(
                 aspectmode='data',
                 camera=dict(eye=dict(x=1.5, y=0, z=0.5)),
                 dragmode='orbit',
-                xaxis=dict(visible=False), yaxis=dict(visible=False), zaxis=dict(visible=False)
+                xaxis=dict(visible=False), yaxis=dict(visible=False), zaxis=dict(visible=False),
+                domain=dict(y=[0.35, 1.0]) # Improve 3D space usage
             ),
-            sliders=[dict(
-                steps=steps, active=0,
-                currentvalue=dict(font=dict(size=14, color="white"), prefix="Time: ", xanchor="center"),
-                pad=dict(t=50), x=0.1, len=0.8
-            )],
+            xaxis2=dict(title="Time (ms)", color="white", showgrid=True, gridcolor="#333"),
+            yaxis2=dict(title="x1 (mV)", color="white", showgrid=True, gridcolor="#333", range=[-2.5, 2.0]),
+            paper_bgcolor="black",
+            plot_bgcolor="black",
+            font=dict(color="white"),
+            margin=dict(l=10, r=10, t=40, b=10),
+            height=900,
+            showlegend=True,
+            legend=dict(orientation="h", y=0.32, x=0.5, xanchor="center")
+        )
+        
+        # Sliders/Buttons
+        # Need to disable sliders for 2D? No, sliders control frame.
+        # Frame matches time.
+        fig.update_layout(
             updatemenus=[dict(
-                type='buttons', showactive=False, y=0.1, x=0.05,
+                type='buttons', showactive=False, y=0.05, x=0.05,
                 buttons=[
-                    dict(label='▶ PLAY', method='animate', args=[None, dict(frame=dict(duration=100, redraw=True), fromcurrent=True)]),
+                    dict(label='▶ PLAY', method='animate', args=[None, dict(frame=dict(duration=50, redraw=True), fromcurrent=True)]),
                     dict(label='Ⅱ PAUSE', method='animate', args=[[None], dict(frame=dict(duration=0, redraw=False), mode='immediate')]),
                 ]
             )]
         )
         
-        fig = go.Figure(data=[trace_glass, dataset_node_trace], layout=layout, frames=frames)
-        
-        # Add annotation about interaction
+        # --- 6. Interaction Annotation ---
         fig.add_annotation(
             text="Controls: Use 'Replay' to restart. Click Nodes for Info.",
             xref="paper", yref="paper",
@@ -189,10 +241,10 @@ class VEPReport:
             font=dict(color="gray", size=12)
         )
         
+        # --- 7. Export with Custom JS ---
         CONFIG = {'scrollZoom': True, 'displayModeBar': True, 'responsive': True}
         
-        # --- Generate HTML with Custom JS ---
-        # Fix 1: Force a specific DIV ID so our JS can find it definitively.
+        # Force a specific DIV ID
         html_content = fig.to_html(config=CONFIG, include_plotlyjs='cdn', full_html=True, div_id="vep-graph")
         
         # Inject Custom UI and JS
@@ -209,7 +261,7 @@ class VEPReport:
                 color: #ddd;
                 font-family: 'Helvetica Neue', Arial, sans-serif;
                 padding: 15px;
-                z-index: 9999; /* Ensure on top */
+                z-index: 9999;
                 box-shadow: 0 4px 20px rgba(0,0,0,0.8);
                 display: none;
                 backdrop-filter: blur(5px);
@@ -217,9 +269,8 @@ class VEPReport:
             #info-panel h3 { margin-top: 0; color: #44aaff; border-bottom: 1px solid #444; padding-bottom: 10px; font-size: 16px; }
             #close-btn { position: absolute; top: 10px; right: 10px; cursor: pointer; color: #888; font-size: 18px; }
             #close-btn:hover { color: white; }
-            /* Force text inside panel to wrap */
             #panel-content { white-space: normal !important; overflow-wrap: break-word; }
-            .plotly-tooltip { display: none !important; } /* Hide default tooltip if we want custom only? Maybe not */
+            .plotly-tooltip { display: none !important; } 
         </style>
         
         <div id="info-panel">
@@ -231,50 +282,37 @@ class VEPReport:
 
         <script>
             console.log("VEP-Report: Initializing Custom Scripts...");
-            
-            // Wait for everything to load
             window.onload = function() {
                 var plotDiv = document.getElementById('vep-graph');
-                
                 if (!plotDiv) {
                     console.error("VEP-Report: Graph DIV not found!");
                     return;
                 }
-                
                 console.log("VEP-Report: Graph DIV found. Attaching click listener.");
-                
                 plotDiv.on('plotly_click', function(data){
                     console.log("VEP-Report: Click Detected!", data);
-                    
                     if (!data || !data.points || data.points.length === 0) return;
                     
                     var pt = data.points[0];
-                    
-                    // Robust check: Does it have text?
-                    if (pt.text) { 
+                    // Only react to 3D Node Trace (Trace 1)
+                    // With subplots, trace numbering is global.
+                    // Trace 0: Ghost. Trace 1: Nodes. Trace 2+: Lines.
+                    if (pt.curveNumber === 1 && pt.text) { 
                         var content = pt.text;
                         var panel = document.getElementById('info-panel');
                         var container = document.getElementById('panel-content');
-                        
-                        // Inject content
                         container.innerHTML = "<h3>Region Details</h3>" + content;
-                        
-                        // Fix style strings that might be narrowly defined in the python string
                         container.innerHTML = container.innerHTML.replace(/min-width: 180px/g, 'width: 100%');
-                        
                         panel.style.display = 'block';
-                    } else {
-                        console.log("VEP-Report: Clicked point has no text.");
                     }
                 });
             };
         </script>
         """
         
-        # Insert UI before the closing body tag
         final_html = html_content.replace('</body>', f'{custom_ui}</body>')
         
         with open(output_path, 'w') as f:
             f.write(final_html)
             
-        print("[Report] Dashboard saved with Interactive Info Panel (Fixed ID).")
+        print("[Report] Dashboard saved with Interactive Info Panel (Fixed ID) + 2D Plots.")
