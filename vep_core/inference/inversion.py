@@ -10,9 +10,10 @@ import numpy as np
 from .. import config
 
 class VEPInference:
-    def __init__(self, n_regions, region_labels):
+    def __init__(self, n_regions, region_labels, full_labels=None):
         self.n_regions = n_regions
         self.labels = region_labels
+        self.full_labels = full_labels if full_labels else region_labels
         
     def generate_hypothesis(self, target_region_str="Temporal"):
         """
@@ -25,7 +26,7 @@ class VEPInference:
         # 0 = Healthy, 1 = Highly Epileptogenic
         ev_distribution = np.random.beta(0.5, 10.0, self.n_regions) # Mostly low values
         
-        target_indices = [i for i, label in enumerate(self.labels) 
+        target_indices = [i for i, label in enumerate(self.full_labels) 
                          if target_region_str.lower() in label.lower() or 
                             "Hippocampus" in label or "Amygdala" in label]
                             

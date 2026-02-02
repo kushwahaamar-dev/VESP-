@@ -103,7 +103,7 @@ def main():
     # 2. Bayesian Inference (Parameter Estimation)
     # ----------------------------------------------------------------
     logger.info("[Step 2] Running Bayesian Inference (HMC Inversion)...")
-    inference_engine = VEPInference(n_regions, labels)
+    inference_engine = VEPInference(n_regions, labels, full_labels=full_labels)
     
     # Generate hypothesis: Right Temporal Lobe Epilepsy
     ev_posterior = inference_engine.generate_hypothesis(target_region_str="Temporal")
