@@ -122,6 +122,13 @@ vep_core/
 2. **Makhalova et al. (2022)**. Virtual epileptic patient brain modeling. *Epilepsia*.
 3. **Proix et al. (2017)**. Permittivity coupling across brain regions determines seizure recruitment in partial epilepsy. *Journal of Neuroscience*.
 
+## 📬 Contact
+
+**Amar Kushwaha**  
+Lead Developer & Researcher  
+📧 [email@example.com](mailto:email@example.com)  
+🔗 [LinkedIn](https://www.linkedin.com/in/amar-kushwaha)
+
 ## License
 
 Copyright © 2026 Amar Kushwaha.
