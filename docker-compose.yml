@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  vep-simulation:
+    build: .
+    image: vep-core:latest
+    container_name: vep_sim
+    volumes:
+      - ./output:/app/output
+    command: python main_pipeline.py --duration 4000 --output /app/output/VEP_Docker_Report.html
+    environment:
+      - PYTHONUNBUFFERED=1
