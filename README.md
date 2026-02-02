@@ -61,14 +61,19 @@ vep_core/
 ├── config.py             # Rigorous physics constants (Jirsa 2014)
 ├── models/
 │   └── epileptor.py      # JIT-compiled 6D Epileptor Kernels (Numba)
+│                         # Implements the phenomenological model of seizure genesis
 ├── data/
 │   └── loader.py         # Robust Data Ingestion (TVB Connectivity)
+│                         # Handles MRI, fMRI, and SEEG multimodal datasets
 ├── inference/
 │   └── inversion.py      # Bayesian Parameter Estimation Logic
+│                         # Uses Hamiltonian Monte Carlo / Variational Inference
 ├── simulation/
 │   └── forward.py        # Ring-Buffer Time Integration Engine
+│                         # Handles spatiotemporal delays efficiently
 └── viz/
     └── report.py         # "Glass Brain" Visualization Engine
+                          # Generates interactive HTML dashboards using Plotly
 ```
 
 ## 📚 References
