@@ -59,6 +59,31 @@ The full pipeline (Data -> Inference -> Simulation -> Report) can be executed wi
 python main_pipeline.py
 ```
 
+### Advanced Usage
+
+The pipeline supports several command-line arguments for research workflows:
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `--patient` | `PAT001` | Patient ID for metadata/logging |
+| `--duration` | `4000` | Simulation duration in milliseconds |
+| `--resume` | `False` | Resume simulation from last checkpoint |
+| `--checkpoint` | `simulation_checkpoint.npz` | Path to save/load state |
+
+Example running a longer simulation for a specific patient:
+
+```bash
+python main_pipeline.py --patient PAT002 --duration 8000 --output report_pat002.html
+```
+
+### Running Tests
+
+To verify the integrity of the physics engine and pipeline components:
+
+```bash
+pytest tests/
+```
+
 ### Viewing the Surgical Report
 
 The pipeline generates an interactive HTML dashboard:
