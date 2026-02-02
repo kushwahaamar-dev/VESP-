@@ -19,6 +19,21 @@ It implements the Virtual Epileptic Patient (VEP) workflow (Jirsa et al., 2016; 
 - **Spatiotemporal Delays**: Full implementation of white-matter transmission delays using a Ring-Buffer memory architecture ($v = 3.0 m/s$).
 - **Clinical Analytics**: Automatic computation of Seizure Onset Times and Recruitment Latencies for surgical decision support.
 
+## ⚙️ Physical Model Configuration
+
+The physics engine is governed by rigorous biophysical constants defined in `vep_core/config.py`. These parameters ensure the model adheres to realistic brain dynamics (Jirsa et al., 2014).
+
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| `conduction_velocity` | 3.0 m/s | Speed of signal transmission along white matter tracts |
+| `global_coupling` | 0.05 | Scaling factor $G$ for long-range network inputs |
+| `x0_critical` | -2.0 | Bifurcation parameter threshold for seizure onset |
+| `r` | 0.00035 | Slow permittivity variable timescale ($1/\tau_0$) |
+
+Simulation Time Integration:
+- **Heun Stochastic Integration** with $dt = 0.05$ ms
+- **Ring-Buffer Delay Compensation** for transmission delays
+
 ## 🚀 Quick Start
 
 ### Installation
