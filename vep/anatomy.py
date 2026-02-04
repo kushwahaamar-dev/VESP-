@@ -179,19 +179,24 @@ class BrainAnatomy:
             mapping_file = os.path.join(self.data_root, 'macaque_v3', 'regionMapping_147k_84.txt')
         else:
             # Find best matching mapping
-            res_mappings = mapping_files.get(resolution, mapping_files['16k'])
-            if self.atlas_regions in res_mappings:
-                fname = res_mappings[self.atlas_regions]
+            res_mappings = mapping_files.get(resolution, {})
+            fname = res_mappings.get(self.atlas_regions)
+            
+            if fname:
+                mapping_file = os.path.join(self.data_root, 'regionMapping', fname)
             else:
-                fname = 'regionMapping_16k_76.txt'
-            mapping_file = os.path.join(self.data_root, 'regionMapping', fname)
+                mapping_file = None
         
-        if os.path.exists(mapping_file):
+        if mapping_file and os.path.exists(mapping_file):
             self.region_mapping = np.loadtxt(mapping_file, dtype=int)
         else:
-            # Create dummy mapping if file missing
-            logger.warning(f"Region mapping not found: {mapping_file}")
-            self.region_mapping = np.zeros(len(self.vertices), dtype=int)
+            # Create dummy mapping if file missing or undefined
+            if mapping_file:
+                logger.warning(f"Region mapping file missing: {mapping_file}")
+            else:
+                logger.warning(f"No region mapping for {self.atlas_regions} regions @ {resolution}")
+                
+            self.region_mapping = np.full(len(self.vertices), -1, dtype=int)
     
     def get_region_name(self, code):
         """Expand region code to full anatomical name."""
