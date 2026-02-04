@@ -53,6 +53,8 @@ def parse_args():
                         help='Save simulation results to checkpoint file')
     parser.add_argument('--list-atlases', action='store_true',
                         help='List available atlas options and exit')
+    parser.add_argument('--native', action='store_true',
+                        help='Use native high-performance viewer (PyVista) instead of HTML report')
     
     return parser.parse_args()
 
@@ -136,8 +138,16 @@ def main():
     # ==================== 4. GENERATE REPORT ====================
     logger.info("[4/4] Generating visualization...")
     
-    visualizer = BrainVisualizer(anatomy)
-    visualizer.create_report(time, data, onset_times, x0_values, args.output)
+    # ==================== 4. GENERATE REPORT ====================
+    logger.info("[4/4] Generating visualization...")
+    
+    if args.native:
+        from vep.native import NativeVisualizer
+        visualizer = NativeVisualizer(anatomy)
+        visualizer.show(time, data, onset_times, x0_values)
+    else:
+        visualizer = BrainVisualizer(anatomy)
+        visualizer.create_report(time, data, onset_times, x0_values, args.output)
     
     logger.info("=" * 60)
     logger.info(f"  Complete! Open: {args.output}")
