@@ -425,4 +425,5 @@ This project is for research and educational purposes. TVB is distributed under 
 - **The Virtual Brain Consortium**
 - **Human Brain Project / EBRAINS**
 - **Allen Institute for Brain Science** (Mouse atlas data)
-# Contributors: Ohinoyi Moiza, Amar Kushwaha, Shruti Chougule
+  
+## Contributors: Amar Kushwaha, Ohinoyi Moiza, Shruti Chougule
