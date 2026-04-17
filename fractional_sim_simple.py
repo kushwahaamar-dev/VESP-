@@ -111,7 +111,7 @@ def simulate_patient(patient_id, beta=0.8):
     return n_electrodes
 
 # Run simulations
-patients = ['sub-R1001P', 'sub-R1002P', 'sub-R1003P']
+patients = ['sub-R1001P', 'sub-R1002P', 'sub-R1003P', 'sub-R1006P', 'sub-R1010J']
 beta_values = [1.0, 0.8, 0.6]
 
 print("="*70)
